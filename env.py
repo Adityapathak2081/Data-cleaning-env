@@ -108,14 +108,14 @@ class DataCleaningEnv:
     def _grade(self, action: Action):
         """
         The grader - scores the agent's cleaned data.
-        Returns (score between 0.0-1.0, feedback string)
+        Returns (score strictly between 0.01 and 0.99, feedback string)
         """
 
         # Try to parse the cleaned data the agent returned
         try:
             cleaned = pd.DataFrame(json.loads(action.cleaned_data))
         except Exception as e:
-            return 0.0, f"Could not parse cleaned_data as JSON ❌ Error: {e}"
+            return 0.05, f"Could not parse cleaned_data as JSON ❌ Error: {e}"
 
         score = 0.0
         feedback = []
@@ -124,10 +124,11 @@ class DataCleaningEnv:
         # Check if all null/None values are gone
         null_count = cleaned.isnull().sum().sum()
         if null_count == 0:
-            score += 0.4
-            feedback.append("No nulls remaining ✅ (+0.4)")
+            score += 0.38
+            feedback.append("No nulls remaining ✅ (+0.38)")
         else:
-            feedback.append(f"{null_count} null(s) still remaining ❌ (+0.0)")
+            score += 0.05
+            feedback.append(f"{null_count} null(s) still remaining ❌ (+0.05)")
 
         # ── MEDIUM: fix_types + duplicates ───────────
         if self.task in ("fix_types", "full_clean"):
@@ -137,20 +138,23 @@ class DataCleaningEnv:
                 age_numeric = pd.to_numeric(cleaned["age"], errors="coerce")
                 bad_types = age_numeric.isnull().sum()
                 if bad_types == 0:
-                    score += 0.2
-                    feedback.append("Age column types correct ✅ (+0.2)")
+                    score += 0.19
+                    feedback.append("Age column types correct ✅ (+0.19)")
                 else:
-                    feedback.append(f"Age column has {bad_types} non-numeric value(s) ❌ (+0.0)")
+                    score += 0.05
+                    feedback.append(f"Age column has {bad_types} non-numeric value(s) ❌ (+0.05)")
             except KeyError:
-                feedback.append("Age column missing ❌ (+0.0)")
+                score += 0.02
+                feedback.append("Age column missing ❌ (+0.02)")
 
             # Check no duplicate rows
             dup_count = cleaned.duplicated().sum()
             if dup_count == 0:
-                score += 0.2
-                feedback.append("No duplicate rows ✅ (+0.2)")
+                score += 0.19
+                feedback.append("No duplicate rows ✅ (+0.19)")
             else:
-                feedback.append(f"{dup_count} duplicate row(s) remaining ❌ (+0.0)")
+                score += 0.05
+                feedback.append(f"{dup_count} duplicate row(s) remaining ❌ (+0.05)")
 
         # ── HARD: outliers + formatting ───────────────
         if self.task == "full_clean":
@@ -160,26 +164,32 @@ class DataCleaningEnv:
                 age_col = pd.to_numeric(cleaned["age"], errors="coerce")
                 outliers = cleaned[(age_col < 0) | (age_col > 100)]
                 if len(outliers) == 0:
-                    score += 0.1
-                    feedback.append("No age outliers ✅ (+0.1)")
+                    score += 0.09
+                    feedback.append("No age outliers ✅ (+0.09)")
                 else:
-                    feedback.append(f"{len(outliers)} outlier(s) in age column ❌ (+0.0)")
+                    score += 0.02
+                    feedback.append(f"{len(outliers)} outlier(s) in age column ❌ (+0.02)")
             except KeyError:
-                feedback.append("Age column missing ❌ (+0.0)")
+                score += 0.02
+                feedback.append("Age column missing ❌ (+0.02)")
 
-            # Check department names are Title Case (e.g. "Hr" → "HR" not checked,
-            # just that it's not all lowercase like "hr")
+            # Check department names are Title Case
             try:
                 badly_formatted = cleaned[
                     cleaned["department"] != cleaned["department"].str.title()
                 ]
                 if len(badly_formatted) == 0:
-                    score += 0.1
-                    feedback.append("Department formatting correct ✅ (+0.1)")
+                    score += 0.09
+                    feedback.append("Department formatting correct ✅ (+0.09)")
                 else:
-                    feedback.append(f"{len(badly_formatted)} department(s) not Title Case ❌ (+0.0)")
+                    score += 0.02
+                    feedback.append(f"{len(badly_formatted)} department(s) not Title Case ❌ (+0.02)")
             except KeyError:
-                feedback.append("Department column missing ❌ (+0.0)")
+                score += 0.02
+                feedback.append("Department column missing ❌ (+0.02)")
+
+        # ── ENSURE SCORE IS STRICTLY BETWEEN 0 and 1 ──
+        score = round(min(max(score, 0.01), 0.99), 2)
 
         return score, " | ".join(feedback)
 
