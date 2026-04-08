@@ -6,26 +6,24 @@ from datasets import get_dataset
 
 # ─────────────────────────────────────────
 # TYPED MODELS
-# These define what the agent sees, does,
-# and gets back as feedback
 # ─────────────────────────────────────────
 
 class Observation(BaseModel):
     """What the agent SEES at each step"""
     dataset_name: str
-    data: str           # the dataset as a JSON string
-    issues_hint: str    # a hint about what's wrong
-    task: str           # which task is being run
+    data: str
+    issues_hint: str
+    task: str
 
 class Action(BaseModel):
     """What the agent DOES"""
-    cleaned_data: str   # the cleaned dataset as JSON string
-    steps_taken: str    # explanation of what the agent fixed
+    cleaned_data: str
+    steps_taken: str
 
 class Reward(BaseModel):
     """Feedback the agent gets after acting"""
-    score: float        # 0.0 to 1.0
-    feedback: str       # human readable explanation of score
+    score: float
+    feedback: str
 
 
 # ─────────────────────────────────────────
@@ -35,7 +33,7 @@ class Reward(BaseModel):
 class DataCleaningEnv:
     """
     A real-world data cleaning environment.
-    
+
     3 Tasks:
       - fix_nulls  (easy)   : fill missing values
       - fix_types  (medium) : fix types + remove duplicates
@@ -49,15 +47,11 @@ class DataCleaningEnv:
         self.step_count = 0
 
     def reset(self):
-        """
-        Resets the environment to a fresh state.
-        Returns the first Observation.
-        """
+        """Resets the environment to a fresh state."""
         self.dataset = get_dataset("employee_data")
         self.done = False
         self.step_count = 0
 
-        # Different hints for different tasks
         hints = {
             "fix_nulls":  "Some columns have missing (None) values. Fill them appropriately.",
             "fix_types":  "Some columns have wrong data types and there are duplicate rows. Fix them.",
@@ -72,9 +66,7 @@ class DataCleaningEnv:
         )
 
     def state(self):
-        """
-        Returns the current state of the environment.
-        """
+        """Returns the current state of the environment."""
         return {
             "task": self.task,
             "dataset": self.dataset["name"] if self.dataset else None,
@@ -83,16 +75,10 @@ class DataCleaningEnv:
         }
 
     def step(self, action: Action):
-        """
-        Agent submits a cleaned dataset.
-        We grade it and return (observation, reward, done, info).
-        """
+        """Agent submits a cleaned dataset."""
         self.step_count += 1
-
-        # Grade the action
         score, feedback = self._grade(action)
-
-        self.done = True  # one action per episode
+        self.done = True
 
         obs = Observation(
             dataset_name=self.dataset["name"],
@@ -103,7 +89,6 @@ class DataCleaningEnv:
         reward = Reward(score=round(score, 2), feedback=feedback)
 
         return obs, reward, self.done, {"steps": self.step_count}
-
 
     def _grade(self, action: Action):
         """
@@ -117,78 +102,89 @@ class DataCleaningEnv:
         except Exception as e:
             return 0.05, f"Could not parse cleaned_data as JSON ❌ Error: {e}"
 
-        score = 0.0
         feedback = []
 
         # ── EASY: fix_nulls ──────────────────────────
-        # Check if all null/None values are gone
         null_count = cleaned.isnull().sum().sum()
         if null_count == 0:
-            score += 0.38
-            feedback.append("No nulls remaining ✅ (+0.38)")
+            null_score = 0.38
+            feedback.append("No nulls remaining ✅")
         else:
-            score += 0.05
-            feedback.append(f"{null_count} null(s) still remaining ❌ (+0.05)")
+            null_score = 0.06
+            feedback.append(f"{null_count} null(s) still remaining ❌")
 
         # ── MEDIUM: fix_types + duplicates ───────────
-        if self.task in ("fix_types", "full_clean"):
+        type_score = 0.0
+        dup_score = 0.0
 
-            # Check age column is all numeric
+        if self.task in ("fix_types", "full_clean"):
             try:
                 age_numeric = pd.to_numeric(cleaned["age"], errors="coerce")
                 bad_types = age_numeric.isnull().sum()
                 if bad_types == 0:
-                    score += 0.19
-                    feedback.append("Age column types correct ✅ (+0.19)")
+                    type_score = 0.18
+                    feedback.append("Age column types correct ✅")
                 else:
-                    score += 0.05
-                    feedback.append(f"Age column has {bad_types} non-numeric value(s) ❌ (+0.05)")
+                    type_score = 0.06
+                    feedback.append(f"Age has {bad_types} non-numeric value(s) ❌")
             except KeyError:
-                score += 0.02
-                feedback.append("Age column missing ❌ (+0.02)")
+                type_score = 0.03
+                feedback.append("Age column missing ❌")
 
-            # Check no duplicate rows
             dup_count = cleaned.duplicated().sum()
             if dup_count == 0:
-                score += 0.19
-                feedback.append("No duplicate rows ✅ (+0.19)")
+                dup_score = 0.18
+                feedback.append("No duplicate rows ✅")
             else:
-                score += 0.05
-                feedback.append(f"{dup_count} duplicate row(s) remaining ❌ (+0.05)")
+                dup_score = 0.06
+                feedback.append(f"{dup_count} duplicate(s) remaining ❌")
 
         # ── HARD: outliers + formatting ───────────────
-        if self.task == "full_clean":
+        outlier_score = 0.0
+        format_score = 0.0
 
-            # Check no age outliers (valid range: 0-100)
+        if self.task == "full_clean":
             try:
                 age_col = pd.to_numeric(cleaned["age"], errors="coerce")
                 outliers = cleaned[(age_col < 0) | (age_col > 100)]
                 if len(outliers) == 0:
-                    score += 0.09
-                    feedback.append("No age outliers ✅ (+0.09)")
+                    outlier_score = 0.09
+                    feedback.append("No age outliers ✅")
                 else:
-                    score += 0.02
-                    feedback.append(f"{len(outliers)} outlier(s) in age column ❌ (+0.02)")
+                    outlier_score = 0.03
+                    feedback.append(f"{len(outliers)} outlier(s) in age ❌")
             except KeyError:
-                score += 0.02
-                feedback.append("Age column missing ❌ (+0.02)")
+                outlier_score = 0.03
+                feedback.append("Age column missing ❌")
 
-            # Check department names are Title Case
             try:
                 badly_formatted = cleaned[
                     cleaned["department"] != cleaned["department"].str.title()
                 ]
                 if len(badly_formatted) == 0:
-                    score += 0.09
-                    feedback.append("Department formatting correct ✅ (+0.09)")
+                    format_score = 0.09
+                    feedback.append("Department formatting correct ✅")
                 else:
-                    score += 0.02
-                    feedback.append(f"{len(badly_formatted)} department(s) not Title Case ❌ (+0.02)")
+                    format_score = 0.03
+                    feedback.append(f"{len(badly_formatted)} department(s) wrong format ❌")
             except KeyError:
-                score += 0.02
-                feedback.append("Department column missing ❌ (+0.02)")
+                format_score = 0.03
+                feedback.append("Department column missing ❌")
 
-        # ── ENSURE SCORE IS STRICTLY BETWEEN 0 and 1 ──
+        # ── CALCULATE FINAL SCORE BY TASK ──
+        if self.task == "fix_nulls":
+            score = null_score
+
+        elif self.task == "fix_types":
+            score = null_score + type_score + dup_score
+
+        elif self.task == "full_clean":
+            score = null_score + type_score + dup_score + outlier_score + format_score
+
+        else:
+            score = 0.05
+
+        # ── HARD CLAMP ──
         score = round(min(max(score, 0.01), 0.99), 2)
 
         return score, " | ".join(feedback)
