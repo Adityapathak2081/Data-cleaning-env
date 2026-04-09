@@ -14,21 +14,21 @@ tasks:
     description: >
       Detect and fill missing (null/None) values in the dataset
       using appropriate strategies like median or mode.
-    max_score: 0.4
+    max_score: 0.38
 
   - name: fix_types
     difficulty: medium
     description: >
       Fix incorrect data types in columns and remove duplicate rows,
       in addition to handling null values.
-    max_score: 0.8
+    max_score: 0.74
 
   - name: full_clean
     difficulty: hard
     description: >
       Perform a complete cleaning pipeline - handle nulls, fix types,
       remove duplicates, fix outliers, and standardize formatting.
-    max_score: 1.0
+    max_score: 0.92
 
 observation_space:
   dataset_name: string
@@ -41,8 +41,8 @@ action_space:
   steps_taken: string
 
 reward:
-  min: 0.0
-  max: 1.0
+  min: 0.01
+  max: 0.99
   type: continuous
   description: >
     Partial credit awarded for each cleaning step completed correctly.
@@ -50,9 +50,9 @@ reward:
     outlier handling, and formatting corrections.
 
 baseline_scores:
-  fix_nulls: 0.40
-  fix_types: 0.80
-  full_clean: 0.90
+  fix_nulls: 0.38
+  fix_types: 0.74
+  full_clean: 0.86
 
 tags:
   - data-cleaning
