@@ -8,11 +8,20 @@ app = FastAPI(
     version="1.0.0"
 )
 
-TASK = os.getenv("TASK", "fix_nulls")
-env = DataCleaningEnv(task=TASK)
+# Create all 3 task environments
+envs = {
+    "fix_nulls":  DataCleaningEnv(task="fix_nulls"),
+    "fix_types":  DataCleaningEnv(task="fix_types"),
+    "full_clean": DataCleaningEnv(task="full_clean")
+}
 
-# Auto-reset on startup so dataset is never None
-env.reset()
+# Auto-reset all on startup
+for e in envs.values():
+    e.reset()
+
+# Default task
+TASK = os.getenv("TASK", "fix_nulls")
+current_task = TASK
 
 
 @app.get("/")
@@ -20,50 +29,107 @@ def home():
     return {
         "status": "running",
         "environment": "data-cleaning-env",
-        "current_task": TASK
+        "tasks": list(envs.keys()),
+        "current_task": current_task
     }
 
 
 @app.post("/reset")
-def reset():
-    try:
-        obs = env.reset()
-        return obs.dict()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def reset(task: str = None):
+    global current_task
+    if task and task in envs:
+        current_task = task
+    elif task and task not in envs:
+        raise HTTPException(status_code=400, detail=f"Unknown task: {task}. Choose from {list(envs.keys())}")
+    
+    env = envs[current_task]
+    obs = env.reset()
+    return obs.dict()
 
 
 @app.post("/step")
-def step(action: Action):
-    try:
-        # Auto-reset if dataset is None
-        if env.dataset is None:
-            env.reset()
+def step(action: Action, task: str = None):
+    global current_task
+    if task and task in envs:
+        current_task = task
 
-        obs, reward, done, info = env.step(action)
+    env = envs[current_task]
 
-        # Force score strictly between 0 and 1
-        safe_score = round(min(max(float(reward.score), 0.01), 0.99), 2)
+    if env.dataset is None:
+        env.reset()
 
-        return {
-            "observation": obs.dict(),
-            "reward": {
-                "score": safe_score,
-                "feedback": reward.feedback
-            },
-            "done": done,
-            "info": info
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    obs, reward, done, info = env.step(action)
+
+    safe_score = round(min(max(float(reward.score), 0.01), 0.99), 2)
+
+    return {
+        "observation": obs.dict(),
+        "reward": {
+            "score": safe_score,
+            "feedback": reward.feedback
+        },
+        "done": done,
+        "info": info
+    }
 
 
 @app.get("/state")
-def state():
-    try:
-        return env.state()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def state(task: str = None):
+    global current_task
+    if task and task in envs:
+        current_task = task
+    return envs[current_task].state()
+
+
+# Task specific endpoints
+@app.post("/reset/{task_name}")
+def reset_task(task_name: str):
+    if task_name not in envs:
+        raise HTTPException(status_code=400, detail=f"Unknown task: {task_name}")
+    obs = envs[task_name].reset()
+    return obs.dict()
+
+
+@app.post("/step/{task_name}")
+def step_task(task_name: str, action: Action):
+    if task_name not in envs:
+        raise HTTPException(status_code=400, detail=f"Unknown task: {task_name}")
+    
+    env = envs[task_name]
+    if env.dataset is None:
+        env.reset()
+
+    obs, reward, done, info = env.step(action)
+
+    safe_score = round(min(max(float(reward.score), 0.01), 0.99), 2)
+
+    return {
+        "observation": obs.dict(),
+        "reward": {
+            "score": safe_score,
+            "feedback": reward.feedback
+        },
+        "done": done,
+        "info": info
+    }
+
+
+@app.get("/state/{task_name}")
+def state_task(task_name: str):
+    if task_name not in envs:
+        raise HTTPException(status_code=400, detail=f"Unknown task: {task_name}")
+    return envs[task_name].state()
+
+
+@app.get("/tasks")
+def list_tasks():
+    return {
+        "tasks": [
+            {"name": "fix_nulls",  "difficulty": "easy"},
+            {"name": "fix_types",  "difficulty": "medium"},
+            {"name": "full_clean", "difficulty": "hard"}
+        ]
+    }
 
 
 if __name__ == "__main__":
