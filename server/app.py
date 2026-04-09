@@ -44,14 +44,21 @@ def reset():
 def step(action: Action):
     try:
         obs, reward, done, info = env.step(action)
+
+        # Force score strictly between 0 and 1
+        safe_score = round(min(max(float(reward.score), 0.01), 0.99), 2)
+
         return {
             "observation": obs.dict(),
-            "reward": reward.dict(),
+            "reward": {
+                "score": safe_score,
+                "feedback": reward.feedback
+            },
             "done": done,
             "info": info
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))    
 
 
 @app.get("/state")

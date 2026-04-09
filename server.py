@@ -49,20 +49,24 @@ def reset():
 
 @app.post("/step")
 def step(action: Action):
-    """
-    Agent submits a cleaned dataset here.
-    Returns observation, reward, done, info.
-    """
     try:
         obs, reward, done, info = env.step(action)
+        
+        # Force score to be strictly between 0 and 1
+        safe_score = float(reward.score)
+        safe_score = round(min(max(safe_score, 0.01), 0.99), 2)
+        
         return {
             "observation": obs.dict(),
-            "reward": reward.dict(),
+            "reward": {
+                "score": safe_score,
+                "feedback": reward.feedback
+            },
             "done": done,
             "info": info
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))    
 
 
 @app.get("/state")

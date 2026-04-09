@@ -80,13 +80,17 @@ class DataCleaningEnv:
         score, feedback = self._grade(action)
         self.done = True
 
+        # Force strictly between 0 and 1
+        score = float(score)
+        score = round(min(max(score, 0.01), 0.99), 2)
+
         obs = Observation(
             dataset_name=self.dataset["name"],
             data=action.cleaned_data,
             issues_hint="Grading complete.",
             task=self.task
         )
-        reward = Reward(score=round(score, 2), feedback=feedback)
+        reward = Reward(score=score, feedback=feedback)
 
         return obs, reward, self.done, {"steps": self.step_count}
 
