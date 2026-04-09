@@ -104,13 +104,13 @@ Example format:
         print()
 
     except json.JSONDecodeError as e:
-        print(f"[STEP] step=1 action=clean_dataset reward=0.00 done=true error=JSON parse failed: {e}")
-        print(f"[END] success=false steps=1 rewards=0.00")
+        print(f"[STEP] step=1 action=clean_dataset reward=0.05 done=true error=JSON parse failed: {e}")
+        print(f"[END] success=false steps=1 rewards=0.05")
         print()
 
     except Exception as e:
-        print(f"[STEP] step=1 action=clean_dataset reward=0.00 done=true error={str(e)}")
-        print(f"[END] success=false steps=1 rewards=0.00")
+        print(f"[STEP] step=1 action=clean_dataset reward=0.05 done=true error={str(e)}")
+        print(f"[END] success=false steps=1 rewards=0.05")
         print()
 
 
