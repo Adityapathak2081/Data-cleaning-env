@@ -4,14 +4,10 @@ from typing import Optional
 import os
 import sys
 
-# Add parent directory to path so we can import env
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from env import DataCleaningEnv, Action
 
-# ─────────────────────────────────────────
-# CREATE THE APP
-# ─────────────────────────────────────────
 app = FastAPI(
     title="Data Cleaning Environment",
     description="An OpenEnv environment where AI agents learn to clean messy datasets.",
@@ -20,6 +16,9 @@ app = FastAPI(
 
 TASK = os.getenv("TASK", "fix_nulls")
 env = DataCleaningEnv(task=TASK)
+
+# Auto-reset on startup so dataset is never None
+env.reset()
 
 
 @app.get("/")
@@ -43,6 +42,10 @@ def reset():
 @app.post("/step")
 def step(action: Action):
     try:
+        # Auto-reset if dataset is None
+        if env.dataset is None:
+            env.reset()
+
         obs, reward, done, info = env.step(action)
 
         # Force score strictly between 0 and 1
@@ -58,7 +61,7 @@ def step(action: Action):
             "info": info
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))    
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/state")
@@ -69,9 +72,6 @@ def state():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ─────────────────────────────────────────
-# MAIN FUNCTION — required by OpenEnv spec
-# ─────────────────────────────────────────
 def main():
     import uvicorn
     uvicorn.run(
