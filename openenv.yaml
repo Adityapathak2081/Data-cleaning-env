@@ -5,7 +5,7 @@ description: >
   messy datasets. Tasks range from filling nulls to full pipeline cleaning
   including type fixes, duplicate removal, outlier handling, and formatting.
 
-author: your_name_here
+author: Adityapathak2081
 license: MIT
 
 tasks:
@@ -14,6 +14,7 @@ tasks:
     description: >
       Detect and fill missing (null/None) values in the dataset
       using appropriate strategies like median or mode.
+    grader: graders:FixNullsGrader
     max_score: 0.38
 
   - name: fix_types
@@ -21,6 +22,7 @@ tasks:
     description: >
       Fix incorrect data types in columns and remove duplicate rows,
       in addition to handling null values.
+    grader: graders:FixTypesGrader
     max_score: 0.74
 
   - name: full_clean
@@ -28,6 +30,7 @@ tasks:
     description: >
       Perform a complete cleaning pipeline - handle nulls, fix types,
       remove duplicates, fix outliers, and standardize formatting.
+    grader: graders:FullCleanGrader
     max_score: 0.92
 
 observation_space:
@@ -46,8 +49,6 @@ reward:
   type: continuous
   description: >
     Partial credit awarded for each cleaning step completed correctly.
-    Score accumulates across null fixing, type fixing, duplicate removal,
-    outlier handling, and formatting corrections.
 
 baseline_scores:
   fix_nulls: 0.38
