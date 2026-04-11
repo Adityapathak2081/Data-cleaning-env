@@ -1,62 +1,6 @@
+spec_version: 1
 name: data-cleaning-env
-version: 1.0.0
-description: >
-  A real-world data cleaning environment where AI agents learn to clean
-  messy datasets. Tasks range from filling nulls to full pipeline cleaning
-  including type fixes, duplicate removal, outlier handling, and formatting.
-
-author: Adityapathak2081
-license: MIT
-
-tasks:
-  - name: fix_nulls
-    difficulty: easy
-    description: >
-      Detect and fill missing (null/None) values in the dataset
-      using appropriate strategies like median or mode.
-    grader: graders:FixNullsGrader
-    max_score: 0.38
-
-  - name: fix_types
-    difficulty: medium
-    description: >
-      Fix incorrect data types in columns and remove duplicate rows,
-      in addition to handling null values.
-    grader: graders:FixTypesGrader
-    max_score: 0.74
-
-  - name: full_clean
-    difficulty: hard
-    description: >
-      Perform a complete cleaning pipeline - handle nulls, fix types,
-      remove duplicates, fix outliers, and standardize formatting.
-    grader: graders:FullCleanGrader
-    max_score: 0.92
-
-observation_space:
-  dataset_name: string
-  data: string (JSON array of records)
-  issues_hint: string
-  task: string
-
-action_space:
-  cleaned_data: string (JSON array of cleaned records)
-  steps_taken: string
-
-reward:
-  min: 0.01
-  max: 0.99
-  type: continuous
-  description: >
-    Partial credit awarded for each cleaning step completed correctly.
-
-baseline_scores:
-  fix_nulls: 0.38
-  fix_types: 0.74
-  full_clean: 0.86
-
-tags:
-  - data-cleaning
-  - real-world
-  - tabular-data
-  - openenv
+type: space
+runtime: fastapi
+app: server.app:app
+port: 7860
