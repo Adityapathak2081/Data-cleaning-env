@@ -2,17 +2,17 @@ import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from openenv.core.env_server.http_server import create_app
-from models import DataCleaningAction, DataCleaningObservation
-from data_cleaning_environment import DataCleaningEnvironment
+try:
+    from openenv.core.env_server import create_fastapi_app
+except ImportError:
+    from openenv.core.env_server.http_server import create_app as create_fastapi_app
 
-app = create_app(
-    DataCleaningEnvironment,
-    DataCleaningAction,
-    DataCleaningObservation,
-    env_name="data-cleaning-env",
-    max_concurrent_envs=3,
-)
+try:
+    from .data_cleaning_environment import DataCleaningEnvironment
+except ImportError:
+    from data_cleaning_environment import DataCleaningEnvironment
+
+app = create_fastapi_app(DataCleaningEnvironment)
 
 def main(host: str = "0.0.0.0", port: int = 7860):
     import uvicorn
