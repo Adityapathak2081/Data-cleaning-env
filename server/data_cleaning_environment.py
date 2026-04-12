@@ -3,6 +3,7 @@ import pandas as pd
 from uuid import uuid4
 from openenv.core.env_server.interfaces import Environment
 from openenv.core.env_server.types import State
+from openenv.core.rubrics import Rubric
 import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -35,31 +36,42 @@ def safe_score(score: float) -> float:
     return round(min(max(float(score), 0.01), 0.99), 2)
 
 
-def grade(cleaned_data_str: str, task: str) -> float:
-    try:
-        cleaned = pd.DataFrame(json.loads(cleaned_data_str))
-    except Exception:
-        return safe_score(0.05)
+def parse_data(data):
+    if data is None:
+        return pd.DataFrame()
+    if isinstance(data, pd.DataFrame):
+        return data
+    if isinstance(data, list):
+        return pd.DataFrame(data) if data else pd.DataFrame()
+    if isinstance(data, str):
+        try:
+            parsed = json.loads(data)
+            if isinstance(parsed, list):
+                return pd.DataFrame(parsed) if parsed else pd.DataFrame()
+        except Exception:
+            pass
+    return pd.DataFrame()
+
+
+def compute_grade(cleaned_data, task: str) -> float:
+    cleaned = parse_data(cleaned_data)
 
     if cleaned.empty:
-        return safe_score(0.06)
+        if task == "fix_nulls":
+            return safe_score(0.06)
+        elif task == "fix_types":
+            return safe_score(0.18)
+        else:
+            return safe_score(0.24)
 
-    # Nulls
-    null_count = cleaned.isnull().sum().sum()
-    null_score = 0.38 if null_count == 0 else 0.06
-
-    type_score = 0.0
-    dup_score = 0.0
-    outlier_score = 0.0
-    format_score = 0.0
+    null_score = 0.38 if cleaned.isnull().sum().sum() == 0 else 0.06
+    type_score = dup_score = outlier_score = format_score = 0.0
 
     if task in ("fix_types", "full_clean"):
         try:
-            age_numeric = pd.to_numeric(cleaned["age"], errors="coerce")
-            type_score = 0.18 if age_numeric.isnull().sum() == 0 else 0.06
+            type_score = 0.18 if pd.to_numeric(cleaned["age"], errors="coerce").isnull().sum() == 0 else 0.06
         except Exception:
             type_score = 0.03
-
         try:
             dup_score = 0.18 if cleaned.duplicated().sum() == 0 else 0.06
         except Exception:
@@ -71,10 +83,8 @@ def grade(cleaned_data_str: str, task: str) -> float:
             outlier_score = 0.09 if len(cleaned[(age_col < 0) | (age_col > 100)]) == 0 else 0.03
         except Exception:
             outlier_score = 0.03
-
         try:
-            badly = cleaned[cleaned["department"] != cleaned["department"].str.title()]
-            format_score = 0.09 if len(badly) == 0 else 0.03
+            format_score = 0.09 if len(cleaned[cleaned["department"] != cleaned["department"].str.title()]) == 0 else 0.03
         except Exception:
             format_score = 0.03
 
@@ -88,33 +98,70 @@ def grade(cleaned_data_str: str, task: str) -> float:
     return safe_score(total)
 
 
+# ─────────────────────────────────────────
+# RUBRICS — attached to environment
+# ─────────────────────────────────────────
+
+class DataCleaningRubric(Rubric):
+    """Main rubric that grades based on current task"""
+
+    def __init__(self, get_task_fn):
+        super().__init__()
+        self._get_task = get_task_fn
+
+    def forward(self, action=None, observation=None) -> float:
+        try:
+            task = self._get_task()
+            if action is None:
+                return safe_score(0.06)
+            if hasattr(action, 'cleaned_data'):
+                return compute_grade(action.cleaned_data, task)
+            return safe_score(0.06)
+        except Exception:
+            return safe_score(0.06)
+
+
+# ─────────────────────────────────────────
+# ENVIRONMENT
+# ─────────────────────────────────────────
+
 class DataCleaningEnvironment(Environment):
     """Data Cleaning Environment — AI agents learn to clean messy datasets."""
 
     SUPPORTS_CONCURRENT_SESSIONS: bool = True
 
     def __init__(self):
-        self._state = State(episode_id=str(uuid4()), step_count=0)
+        self._current_task = "fix_nulls"
         self._task_index = 0
-
-    def reset(self) -> DataCleaningObservation:
         self._state = State(episode_id=str(uuid4()), step_count=0)
-        task = TASKS[self._task_index % len(TASKS)]
-        self._current_task = task
+        # Attach rubric
+        rubric = DataCleaningRubric(get_task_fn=lambda: self._current_task)
+        super().__init__(rubric=rubric)
+
+    def reset(self, seed=None, episode_id=None, **kwargs) -> DataCleaningObservation:
+        self._state = State(episode_id=str(uuid4()), step_count=0)
+        self._current_task = TASKS[self._task_index % len(TASKS)]
+        self._reset_rubric()
 
         return DataCleaningObservation(
             dataset_name="employee_data",
             data=json.dumps(DIRTY_DATA),
-            issues_hint=HINTS[task],
-            task=task,
+            issues_hint=HINTS[self._current_task],
+            task=self._current_task,
             done=False,
-            reward=safe_score(0.05),
+            reward=safe_score(0.06),
         )
 
-    def step(self, action: DataCleaningAction) -> DataCleaningObservation:
+    def step(self, action: DataCleaningAction, timeout_s=None, **kwargs) -> DataCleaningObservation:
         self._state.step_count += 1
-        task = getattr(self, '_current_task', 'fix_nulls')
-        score = grade(action.cleaned_data, task)
+        task = self._current_task
+
+        # Use rubric to compute score
+        score = self._apply_rubric(action, None)
+        if score == 0.0:
+            score = compute_grade(action.cleaned_data, task)
+        score = safe_score(score)
+
         self._task_index += 1
 
         return DataCleaningObservation(
