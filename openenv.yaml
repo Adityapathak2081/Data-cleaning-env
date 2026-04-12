@@ -4,3 +4,16 @@ type: space
 runtime: fastapi
 app: server.app:app
 port: 7860
+
+tasks:
+  - name: fix_nulls
+    difficulty: easy
+    grader: graders:FixNullsGrader
+
+  - name: fix_types
+    difficulty: medium
+    grader: graders:FixTypesGrader
+
+  - name: full_clean
+    difficulty: hard
+    grader: graders:FullCleanGrader
